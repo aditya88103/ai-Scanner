@@ -75,6 +75,9 @@
             detectorLastAt: 0,
             cameraReleaseTimer: null,
             torchOn: false,
+            candidateCode: null,
+            candidateCount: 0,
+            candidateAt: 0,
           },
           util: {},
           health: {},
@@ -764,19 +767,98 @@
         const { renderProductHeader, renderScore, renderDetails, renderNutritionTable, renderIngredients } = M.render;
         const { addToHistory } = M.history;
 
-        async function fetchProduct(barcode) {
-          const code = normalizeBarcode(barcode);
-          if (!code) throw new Error("INVALID");
-          const url = `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`;
-          const res = await fetch(url, { cache: "no-store" });
+        function fetchWithTimeout(url, { timeoutMs = 4500 } = {}) {
+          const controller = new AbortController();
+          const t = setTimeout(() => controller.abort(), timeoutMs);
+          return fetch(url, { cache: "force-cache", signal: controller.signal }).finally(() => clearTimeout(t));
+        }
+
+        function parseProduct(data) {
+          if (!data) return null;
+          if (data.status === 1 && data.product) return data.product;
+          if (data.product) return data.product;
+          return null;
+        }
+
+        function buildFieldsParam() {
+          const fields = [
+            "product_name",
+            "product_name_en",
+            "brands",
+            "image_front_url",
+            "image_url",
+            "nutriscore_grade",
+            "ecoscore_grade",
+            "nova_group",
+            "packaging_text",
+            "packaging",
+            "categories",
+            "countries",
+            "nutriments",
+            "ingredients",
+            "ingredients_text",
+            "ingredients_text_en",
+            "ingredients_text_with_allergens",
+            "ingredients_text_with_allergens_en",
+            "allergens_tags",
+            "labels",
+          ];
+          return `fields=${encodeURIComponent(fields.join(","))}`;
+        }
+
+        async function fetchProductFrom(url) {
+          const res = await fetchWithTimeout(url);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
-          if (!data || data.status !== 1 || !data.product) {
+          const product = parseProduct(data);
+          if (!product) {
             const err = new Error("NOT_FOUND");
             err.code = "NOT_FOUND";
             throw err;
           }
-          return data.product;
+          return product;
+        }
+
+        async function fetchProduct(barcode) {
+          const code = normalizeBarcode(barcode);
+          if (!code) throw new Error("INVALID");
+          const fields = buildFieldsParam();
+          const endpoints = [
+            `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?${fields}`,
+            `https://in.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?${fields}`,
+            `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`,
+            `https://in.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`,
+          ];
+
+          const any = Promise.any
+            ? Promise.any
+            : (promises) =>
+                new Promise((resolve, reject) => {
+                  let rejected = 0;
+                  const errors = [];
+                  promises.forEach((p, i) => {
+                    Promise.resolve(p)
+                      .then(resolve)
+                      .catch((err) => {
+                        errors[i] = err;
+                        rejected += 1;
+                        if (rejected === promises.length) reject(errors);
+                      });
+                  });
+                });
+
+          try {
+            return await any(endpoints.map((u) => fetchProductFrom(u)));
+          } catch (err) {
+            const errors = Array.isArray(err) ? err : err?.errors || [];
+            const notFound = errors.some((e) => e?.code === "NOT_FOUND");
+            if (notFound) {
+              const e = new Error("NOT_FOUND");
+              e.code = "NOT_FOUND";
+              throw e;
+            }
+            throw err;
+          }
         }
 
         async function analyzeBarcode(barcode, { source = "scan" } = {}) {
@@ -789,7 +871,7 @@
           state.currentBarcode = code;
 
           showScreen("loading");
-          await sleep(260); // lets the loading animation breathe
+          await sleep(140); // lets the loading animation breathe
 
           try {
             const product = await fetchProduct(code);
@@ -829,7 +911,7 @@
           } catch (e) {
             const msg =
               e?.code === "NOT_FOUND"
-                ? "We couldn't find that barcode in Open Food Facts."
+                ? "Not found in Open Food Facts. Try scanning again or enter the code manually."
                 : "Network error while fetching product.";
             els.errTitle.textContent = "We couldn't find that product";
             els.errMsg.textContent = msg;
@@ -862,6 +944,32 @@
           const strong = `<strong>${escapeHtml(textStrong)}</strong>`;
           const rest = textRest ? ` ${escapeHtml(textRest)}` : "";
           els.pillStatus.innerHTML = strong + rest;
+        }
+
+        function isValidGtin(code) {
+          const digits = String(code ?? "").replace(/[^\d]/g, "");
+          const len = digits.length;
+          if (![8, 12, 13, 14].includes(len)) return false;
+
+          let sum = 0;
+          let pos = 0;
+          for (let i = len - 2; i >= 0; i -= 1) {
+            const n = Number(digits[i]);
+            if (!Number.isFinite(n)) return false;
+            const weight = pos % 2 === 0 ? 3 : 1;
+            sum += n * weight;
+            pos += 1;
+          }
+          const check = (10 - (sum % 10)) % 10;
+          return check === Number(digits[len - 1]);
+        }
+
+        function acceptBarcode(code) {
+          state.candidateCode = null;
+          state.candidateCount = 0;
+          state.candidateAt = 0;
+          stopScanner();
+          M.api.analyzeBarcode(code, { source: "scan" });
         }
 
         function setFabScanning(isScanning) {
@@ -1125,13 +1233,28 @@
 
           // Basic de-dupe + rate limit
           if (normalized === state.lastCode && now - state.lastDetectedAt < 1600) return;
-          if (now - state.lastDetectedAt < 650) return;
+          if (now - state.lastDetectedAt < 450) return;
 
           state.lastCode = normalized;
           state.lastDetectedAt = now;
 
-          stopScanner();
-          M.api.analyzeBarcode(normalized, { source: "scan" });
+          if (isValidGtin(normalized)) {
+            acceptBarcode(normalized);
+            return;
+          }
+
+          // Accept if we see the same code twice quickly (helps noisy scans / UPC-E)
+          if (state.candidateCode === normalized && now - state.candidateAt < 1400) {
+            state.candidateCount += 1;
+          } else {
+            state.candidateCode = normalized;
+            state.candidateCount = 1;
+            state.candidateAt = now;
+          }
+
+          if (state.candidateCount >= 2) {
+            acceptBarcode(normalized);
+          }
         }
 
         async function startBarcodeDetector(token) {
