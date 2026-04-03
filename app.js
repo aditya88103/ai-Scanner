@@ -767,13 +767,24 @@
         const { renderProductHeader, renderScore, renderDetails, renderNutritionTable, renderIngredients } = M.render;
         const { addToHistory } = M.history;
 
-        function fetchWithTimeout(url, { timeoutMs = 5500, cache = "force-cache" } = {}) {
+        function fetchWithTimeout(url, { timeoutMs = 5500, cache } = {}) {
           if (typeof AbortController === "undefined") {
-            return fetch(url, { cache });
+            return fetch(url, cache ? { cache } : undefined);
           }
           const controller = new AbortController();
           const t = setTimeout(() => controller.abort(), timeoutMs);
-          return fetch(url, { cache, signal: controller.signal }).finally(() => clearTimeout(t));
+          const opts = { signal: controller.signal };
+          if (cache) opts.cache = cache;
+          return fetch(url, opts).finally(() => clearTimeout(t));
+        }
+
+        async function safeFetch(url, opts = {}) {
+          try {
+            return await fetchWithTimeout(url, opts);
+          } catch (err) {
+            // Fallback for browsers that choke on fetch options
+            return fetch(url);
+          }
         }
 
         function parseProduct(data) {
@@ -810,7 +821,7 @@
         }
 
         async function fetchProductFrom(url, opts = {}) {
-          const res = await fetchWithTimeout(url, opts);
+          const res = await safeFetch(url, opts);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
           const product = parseProduct(data);
@@ -834,6 +845,14 @@
             `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`,
             `https://in.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`,
           ];
+          const searchEndpoints = [
+            `https://in.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(
+              code
+            )}&search_simple=1&action=process&json=1&page_size=1`,
+            `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(
+              code
+            )}&search_simple=1&action=process&json=1&page_size=1`,
+          ];
 
           const any = Promise.any
             ? Promise.any
@@ -855,7 +874,9 @@
           const collectErrors = (err) => (Array.isArray(err) ? err : err?.errors || []);
 
           try {
-            return await any(v2Endpoints.map((u) => fetchProductFrom(u, { timeoutMs: 5500, cache: "force-cache" })));
+            return await any(
+              v2Endpoints.map((u) => fetchProductFrom(u, { timeoutMs: 5500, cache: "no-store" }))
+            );
           } catch (err) {
             const errors = collectErrors(err);
             const notFound = errors.some((e) => e?.code === "NOT_FOUND");
@@ -868,12 +889,20 @@
               } catch (err2) {
                 const errors2 = collectErrors(err2);
                 const notFound2 = errors2.some((e) => e?.code === "NOT_FOUND");
-                if (notFound2) {
-                  const e = new Error("NOT_FOUND");
-                  e.code = "NOT_FOUND";
-                  throw e;
+                if (!notFound2) {
+                  // Last resort: search endpoint
+                  try {
+                    const res = await any(
+                      searchEndpoints.map((u) => safeFetch(u, { timeoutMs: 8000, cache: "no-store" }))
+                    );
+                    const data = await res.json();
+                    const product = data?.products?.[0] ?? null;
+                    if (product) return product;
+                  } catch {
+                    // ignore
+                  }
+                  throw err2;
                 }
-                throw err2;
               }
             }
 
@@ -953,7 +982,7 @@
         const { escapeHtml, normalizeBarcode, toast, sleep } = M.util;
 
         const CAMERA_WARM_MS = 120000;
-        const DETECT_THROTTLE_MS = 120;
+        const DETECT_THROTTLE_MS = 80;
 
         function ensureSecureHint() {
           const ok =
@@ -1346,11 +1375,11 @@
               type: "LiveStream",
               target: els.scanner,
               constraints: buildVideoConstraints({ torch: state.torchOn }),
-              area: { top: "35%", right: "10%", left: "10%", bottom: "35%" },
+              area: { top: "30%", right: "5%", left: "5%", bottom: "30%" },
             },
             locate: true,
-            locator: { patchSize: "large", halfSample: false },
-            frequency: 12,
+            locator: { patchSize: "medium", halfSample: true },
+            frequency: 15,
             numOfWorkers: Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1)),
             decoder: {
               readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader"],
