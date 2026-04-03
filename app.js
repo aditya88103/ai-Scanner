@@ -1,6 +1,6 @@
 ﻿(function initMintScan() {
         const $ = (sel) => document.querySelector(sel);
-        const VERSION = "20260403-02";
+        const VERSION = "20260403-03";
 
         window.NutriScan = {
           VERSION,
