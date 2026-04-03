@@ -141,8 +141,8 @@
           setActiveNav(navTarget);
 
           // Camera should only run while on scan screen.
-          if (screenName !== "scan" && state.scanning && typeof M.scanner.stopScanner === "function") {
-            M.scanner.stopScanner();
+          if (screenName !== "scan" && typeof M.scanner.stopScanner === "function") {
+            M.scanner.stopScanner({ releaseCamera: true });
           }
         }
 
@@ -869,6 +869,9 @@
           }
 
           state.currentBarcode = code;
+          if (typeof M.scanner?.stopScanner === "function") {
+            M.scanner.stopScanner({ releaseCamera: true });
+          }
 
           showScreen("loading");
           await sleep(140); // lets the loading animation breathe

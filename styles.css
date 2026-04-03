@@ -43,6 +43,8 @@
         background: var(--bg);
         color: var(--text);
         overflow: hidden;
+        font-size: 15px;
+        line-height: 1.45;
       }
 
       a {
@@ -226,6 +228,9 @@
         font-weight: 800;
         letter-spacing: -0.02em;
         margin: 2px 0 6px;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+        text-wrap: balance;
       }
 
       .sub {
@@ -790,8 +795,8 @@
 
       .score-wrap {
         display: grid;
-        grid-template-columns: 140px 1fr;
-        gap: 12px;
+        grid-template-columns: 132px 1fr;
+        gap: 14px;
         align-items: center;
       }
 
@@ -808,16 +813,16 @@
       }
 
       .ring {
-        width: 140px;
-        height: 140px;
+        width: 132px;
+        height: 132px;
         position: relative;
         display: grid;
         place-items: center;
       }
 
       .ring svg {
-        width: 140px;
-        height: 140px;
+        width: 132px;
+        height: 132px;
         transform: rotate(-90deg);
       }
 
@@ -843,10 +848,11 @@
         text-align: center;
         pointer-events: none;
         row-gap: 4px;
+        padding: 0 6px;
       }
 
       .ring-center .num {
-        font-size: 34px;
+        font-size: 30px;
         font-weight: 900;
         letter-spacing: -0.02em;
         line-height: 1;
@@ -854,9 +860,10 @@
 
       .ring-center .lab {
         margin-top: 2px;
-        font-size: 12px;
+        font-size: 11px;
         color: var(--muted);
         line-height: 1.2;
+        max-width: 90px;
       }
 
       .explain {
