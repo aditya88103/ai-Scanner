@@ -1190,36 +1190,6 @@
             const weight = pos % 2 === 0 ? 3 : 1;
             sum += n * weight;
             pos += 1;
-
-        function ensureSecureHint() {
-          const ok =
-            window.isSecureContext ||
-            location.hostname === "localhost" ||
-            location.hostname === "127.0.0.1" ||
-            location.protocol === "https:";
-          els.pillSecure.style.display = ok ? "none" : "inline-flex";
-          return ok;
-        }
-
-        function setScanPill(textStrong, textRest = "") {
-          const strong = `<strong>${escapeHtml(textStrong)}</strong>`;
-          const rest = textRest ? ` ${escapeHtml(textRest)}` : "";
-          els.pillStatus.innerHTML = strong + rest;
-        }
-
-        function isValidGtin(code) {
-          const digits = String(code ?? "").replace(/[^\d]/g, "");
-          const len = digits.length;
-          if (![8, 12, 13, 14].includes(len)) return false;
-
-          let sum = 0;
-          let pos = 0;
-          for (let i = len - 2; i >= 0; i -= 1) {
-            const n = Number(digits[i]);
-            if (!Number.isFinite(n)) return false;
-            const weight = pos % 2 === 0 ? 3 : 1;
-            sum += n * weight;
-            pos += 1;
           }
           const check = (10 - (sum % 10)) % 10;
           return check === Number(digits[len - 1]);
@@ -1591,6 +1561,148 @@
               readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader"],
             },
           };
+
+          window.Quagga.init(config, (err) => {
+            if (err) {
+              if (token !== state.scanToken) return;
+              state.scanning = false;
+              setFabScanning(false);
+              setScanPill("Camera blocked", "Use manual entry");
+              toast("Camera permission denied or unavailable.");
+              return;
+            }
+
+            // User stopped scan while Quagga was still initializing
+            if (!state.scanning || token !== state.scanToken) {
+              try {
+                window.Quagga.stop();
+              } catch {
+                // ignore
+              }
+              state.quaggaReady = false;
+              return;
+            }
+
+            window.Quagga.start();
+            state.quaggaReady = true;
+            setScanPill("Scanning", "Hold steady");
+            if (state.torchOn) {
+              applyTorchState(true);
+            }
+
+            window.Quagga.onDetected(onQuaggaDetected);
+          });
+        }
+
+        function stopQuagga() {
+          if (typeof window.Quagga === "undefined") return;
+
+          try {
+            window.Quagga.offDetected(onQuaggaDetected);
+          } catch {
+            // ignore
+          }
+
+          if (!state.quaggaReady) return;
+          try {
+            window.Quagga.stop();
+          } catch {
+            // ignore
+          }
+          state.quaggaReady = false;
+        }
+
+        function onQuaggaDetected(result) {
+          const code = result?.codeResult?.code;
+          if (!code) return;
+          handleDetected(code);
+        }
+
+        function releaseCamera() {
+          clearCameraReleaseTimer();
+
+          if (state.cameraVideo) {
+            try {
+              state.cameraVideo.pause();
+            } catch {
+              // ignore
+            }
+            state.cameraVideo.srcObject = null;
+          }
+
+          if (state.cameraStream) {
+            try {
+              state.cameraStream.getTracks().forEach((t) => t.stop());
+            } catch {
+              // ignore
+            }
+          }
+
+          state.cameraStream = null;
+        }
+
+        function startScanner() {
+          if (state.scanning) return;
+
+          clearCameraReleaseTimer();
+          ensureSecureHint();
+          setScanPill("Starting", "camera...");
+
+          const token = ++state.scanToken;
+
+          state.scanning = true;
+          setFabScanning(true);
+
+          if (typeof window.BarcodeDetector !== "undefined") {
+            startBarcodeDetector(token).catch(() => {
+              if (token !== state.scanToken) return;
+              releaseCamera();
+              startQuagga(token);
+            });
+            return;
+          }
+
+          startQuagga(token);
+        }
+
+        async function stopScanner({ releaseCamera: shouldReleaseCamera = false, keepTorch = false } = {}) {
+          state.scanToken++;
+          const token = state.scanToken;
+
+          const wasScanning = state.scanning;
+          state.scanning = false;
+          state.scannerEngine = null;
+
+          if (wasScanning) setScanPill("Ready", "Tap Scan to start");
+          setFabScanning(false);
+
+          stopBarcodeDetector();
+          stopQuagga();
+
+          let waitTorch = false;
+          if (!keepTorch && state.torchOn) {
+            state.torchOn = false;
+            setTorchButton(false);
+            try {
+              applyTorchState(false);
+              waitTorch = true;
+            } catch {}
+          }
+
+          if (waitTorch) {
+            await sleep(250);
+          }
+
+          if (state.scanToken !== token) return;
+
+          if (shouldReleaseCamera) releaseCamera();
+          else scheduleCameraRelease();
+        }
+
+        // Safety: stop camera when the page is backgrounded/closed.
+        window.addEventListener("pagehide", () => stopScanner({ releaseCamera: true }));
+        document.addEventListener("visibilitychange", () => {
+          if (document.hidden) stopScanner({ releaseCamera: true });
         });
 
         M.scanner = { ensureSecureHint, setScanPill, startScanner, stopScanner, releaseCamera, toggleTorch };
