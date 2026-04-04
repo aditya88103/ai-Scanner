@@ -27,6 +27,27 @@
         --nav-h: calc(74px + env(safe-area-inset-bottom));
       }
 
+      .ptr {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 80px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transform: translateY(-100%);
+        z-index: 1000;
+        pointer-events: none;
+      }
+      .ptr svg {
+        width: 24px; height: 24px;
+        stroke: var(--text);
+        border-radius: 50%;
+        background: var(--card2);
+        padding: 10px;
+        box-sizing: content-box;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      }
+
       * {
         box-sizing: border-box;
         -webkit-tap-highlight-color: transparent;

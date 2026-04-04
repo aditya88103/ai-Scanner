@@ -1,6 +1,6 @@
 (function initMintScan() {
         const $ = (sel) => document.querySelector(sel);
-        const VERSION = "20260404-02";
+        const VERSION = "20260404-03";
 
         window.NutriScan = {
           VERSION,
@@ -27,6 +27,7 @@
             modalBackdrop: $("#modal-backdrop"),
             btnManualOpen: $("#btn-manual-open"),
             btnManualClose: $("#btn-manual-close"),
+            btnRefresh: $("#btn-refresh"),
             manualInput: $("#manual-input"),
             manualLookup: $("#manual-lookup"),
             manualPaste: $("#manual-paste"),
@@ -1797,6 +1798,66 @@
 
         // History
         els.btnClearHistory.addEventListener("click", () => M.history.clearHistory());
+
+        // Refresh button logic
+        if (els.btnRefresh) {
+          els.btnRefresh.addEventListener("click", () => {
+             const icon = els.btnRefresh.querySelector('svg');
+             if (icon) {
+               icon.style.transition = 'transform 0.4s ease-out';
+               icon.style.transform = 'rotate(360deg)';
+             }
+             if (navigator.vibrate) navigator.vibrate(20);
+             setTimeout(() => window.location.reload(), 250);
+          });
+        }
+
+        // Native custom pull-to-refresh for web app body
+        let ptrStartY = 0;
+        let ptrCurrentY = 0;
+        let isPtrActive = false;
+        const ptrEl = document.getElementById("ptr");
+        const screensEl = document.querySelector(".screens");
+
+        if (screensEl && ptrEl) {
+          screensEl.addEventListener('touchstart', (e) => {
+            const screen = e.target.closest('.screen');
+            if (screen && screen.scrollTop <= 0) {
+              ptrStartY = e.touches[0].clientY;
+              isPtrActive = true;
+              ptrEl.style.transition = 'none';
+            } else {
+              isPtrActive = false;
+            }
+          }, {passive: true});
+
+          screensEl.addEventListener('touchmove', (e) => {
+            if (!isPtrActive) return;
+            const y = e.touches[0].clientY;
+            const dy = y - ptrStartY;
+            if (dy > 0) {
+              ptrCurrentY = dy;
+              const pull = Math.min(dy, 120);
+              ptrEl.style.transform = `translateY(${pull - 100}px) rotate(${pull * 3}deg)`;
+            }
+          }, {passive: true});
+
+          screensEl.addEventListener('touchend', () => {
+            if (!isPtrActive) return;
+            if (ptrCurrentY > 120) {
+               ptrEl.style.transition = 'transform 0.2s';
+               ptrEl.style.transform = `translateY(20px) rotate(360deg)`;
+               if (navigator.vibrate) navigator.vibrate(40);
+               setTimeout(() => window.location.reload(), 200);
+            } else {
+               ptrEl.style.transition = 'transform 0.3s ease';
+               ptrEl.style.transform = `translateY(-100%)`;
+            }
+            ptrStartY = 0;
+            ptrCurrentY = 0;
+            isPtrActive = false;
+          }, {passive: true});
+        }
 
         els.historyStrip.addEventListener("click", (e) => {
           const card = e.target.closest(".hcard");
