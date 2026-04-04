@@ -1798,18 +1798,17 @@
         // History
         els.btnClearHistory.addEventListener("click", () => M.history.clearHistory());
 
-        // Hide FAB when scrolled down on any non-scan screen
-        document.querySelectorAll(".screen").forEach((screen) => {
-          screen.addEventListener("scroll", () => {
-            if (els.fab) {
-              if (screen.scrollTop > 30) {
-                els.fab.classList.add("fab--hidden");
-              } else {
-                els.fab.classList.remove("fab--hidden");
-              }
+        // Hide FAB only when scrolled down on the About screen
+        const aboutScreen = document.getElementById("screen-about");
+        if (aboutScreen && els.fab) {
+          aboutScreen.addEventListener("scroll", () => {
+            if (aboutScreen.scrollTop > 30) {
+              els.fab.classList.add("fab--hidden");
+            } else {
+              els.fab.classList.remove("fab--hidden");
             }
           }, { passive: true });
-        });
+        }
 
         // Native custom pull-to-refresh for web app body
         let ptrStartY = 0;
