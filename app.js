@@ -1,6 +1,6 @@
 (function initMintScan() {
         const $ = (sel) => document.querySelector(sel);
-        const VERSION = "20260403-04";
+        const VERSION = "20260404-01";
 
         window.NutriScan = {
           VERSION,
@@ -1058,7 +1058,7 @@
 
           if (M.nav && typeof M.nav.go === "function") M.nav.go("loading");
           else showScreen("loading");
-          await sleep(140); // lets the loading animation breathe
+          await sleep(1);
 
           try {
             const product = await fetchProduct(code);
