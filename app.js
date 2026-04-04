@@ -1011,65 +1011,37 @@
             });
           }
 
-          let sawNotFound = false;
-          let lastError = null;
-
-          for (const item of urls) {
-            try {
-              if (item.kind === "search") {
-                const res = await safeFetch(item.url, { timeoutMs: item.timeoutMs, cache: "no-store" });
-
-                if (res.status === 404) {
-                  sawNotFound = true;
-                  continue;
-                }
-
-                if (!res.ok) {
-                  const err = new Error(`HTTP ${res.status}`);
-                  err.code = res.status === 429 ? "RATE_LIMIT" : "HTTP_ERROR";
-                  err.status = res.status;
-                  throw err;
-                }
-
-                let data;
-                try {
-                  data = await res.json();
-                } catch (e) {
-                  const err = new Error("BAD_JSON");
-                  err.code = "BAD_JSON";
-                  err.cause = e;
-                  throw err;
-                }
-
-                const product = data?.products?.[0] ?? null;
-                if (!product) {
-                  sawNotFound = true;
-                  continue;
-                }
-                return product;
+          const tryFetchResult = async (item) => {
+            if (item.kind === "search") {
+              const res = await safeFetch(item.url, { timeoutMs: item.timeoutMs, cache: "no-store" });
+              if (res.status === 404) {
+                const err = new Error("NOT_FOUND"); err.code = "NOT_FOUND"; throw err;
               }
-
-              return await fetchProductFrom(item.url, { timeoutMs: item.timeoutMs, cache: "no-store" });
-            } catch (e) {
-              if (e?.code === "NOT_FOUND") {
-                sawNotFound = true;
-                continue;
+              if (!res.ok) {
+                const err = new Error(`HTTP ${res.status}`);
+                err.code = res.status === 429 ? "RATE_LIMIT" : "HTTP_ERROR";
+                throw err;
               }
-              if (e?.code === "RATE_LIMIT") throw e;
-              lastError = e;
+              const data = await res.json();
+              const product = data?.products?.[0] ?? null;
+              if (!product) {
+                const err = new Error("NOT_FOUND"); err.code = "NOT_FOUND"; throw err;
+              }
+              return product;
             }
-          }
+            return await fetchProductFrom(item.url, { timeoutMs: item.timeoutMs, cache: "no-store" });
+          };
 
-          if (sawNotFound) {
+          try {
+            return await Promise.any(urls.map(item => tryFetchResult(item)));
+          } catch (aggErr) {
             const err = new Error("NOT_FOUND");
             err.code = "NOT_FOUND";
+            if (aggErr.errors && aggErr.errors.some(e => e.code === "RATE_LIMIT")) {
+              err.code = "RATE_LIMIT";
+            }
             throw err;
           }
-          if (lastError) throw lastError;
-
-          const err = new Error("NOT_FOUND");
-          err.code = "NOT_FOUND";
-          throw err;
         }
 
         async function analyzeBarcode(barcode, { source = "scan" } = {}) {
@@ -1129,7 +1101,7 @@
             let title = "We couldn't find that product";
 
             if (e?.code === "NOT_FOUND") {
-              msg = "Not found in Open Food Facts. Try scanning again or enter the code manually.";
+              msg = "If a product isn’t found, try scanning again (steady + good light) or use Manual entry. You can also add or improve products on Open Food Facts to help everyone.";
             } else if (e?.code === "RATE_LIMIT") {
               title = "Too many requests";
               msg = "Open Food Facts is rate-limiting. Please wait 20 seconds and try again.";
