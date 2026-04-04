@@ -213,6 +213,12 @@
         box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
         backdrop-filter: blur(18px);
         -webkit-backdrop-filter: blur(18px);
+        transition: transform 300ms cubic-bezier(0.2, 0.9, 0.2, 1), box-shadow 300ms ease, border-color 300ms ease;
+      }
+      .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 24px 50px rgba(0, 0, 0, 0.55);
+        border-color: rgba(255, 255, 255, 0.12);
       }
 
       .card.pad {
@@ -264,6 +270,11 @@
         border-radius: 18px;
         border: 1px solid rgba(255, 255, 255, 0.08);
         background: rgba(255, 255, 255, 0.03);
+        transition: transform 250ms ease, background 250ms ease;
+      }
+      .fitem:hover {
+        background: rgba(255, 255, 255, 0.06);
+        transform: translateX(2px);
       }
 
       .ficon {
@@ -733,6 +744,12 @@
         background: linear-gradient(180deg, rgba(53, 255, 225, 0.92), rgba(0, 201, 167, 0.92));
         color: #04110d;
         box-shadow: 0 14px 30px rgba(0, 201, 167, 0.18);
+        transition: transform 250ms ease, box-shadow 250ms ease, filter 250ms ease;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 36px rgba(0, 201, 167, 0.25);
+        filter: brightness(1.1);
       }
 
       .btn:active {

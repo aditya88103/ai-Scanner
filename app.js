@@ -33,6 +33,7 @@
             btnTorch: $("#btn-torch"),
 
             btnBackToScan: $("#btn-back-to-scan"),
+            btnShare: $("#btn-share"),
 
             errInput: $("#err-input"),
             errLookup: $("#err-lookup"),
@@ -1469,6 +1470,7 @@
           state.lastDetectedAt = now;
 
           if (isValidGtin(normalized)) {
+            if (navigator.vibrate) navigator.vibrate(40);
             acceptBarcode(normalized);
             return;
           }
@@ -1483,6 +1485,7 @@
           }
 
           if (state.candidateCount >= 2) {
+            if (navigator.vibrate) navigator.vibrate(40);
             acceptBarcode(normalized);
           }
         }
@@ -1770,6 +1773,22 @@
 
         // Result / error controls
         els.btnBackToScan.addEventListener("click", () => (M.nav ? M.nav.back() : showScreen("scan")));
+        if (els.btnShare) {
+          els.btnShare.addEventListener("click", () => {
+            if (navigator.share && state.currentProduct) {
+              const name = state.currentProduct.product_name || "a product";
+              const score = els.scoreNum.textContent || "?";
+              if (navigator.vibrate) navigator.vibrate(20);
+              navigator.share({
+                title: 'NutriScan Result',
+                text: `I just scanned ${name} and it scored ${score}/10 on NutriScan!`,
+                url: window.location.href,
+              }).catch(() => {});
+            } else {
+              toast("Sharing is not supported on this device.");
+            }
+          });
+        }
         els.btnErrorBack.addEventListener("click", () => (M.nav ? M.nav.back() : showScreen("scan")));
         els.errScanAgain.addEventListener("click", () => {
           if (M.nav && typeof M.nav.go === "function") M.nav.go("scan", { replace: true });
