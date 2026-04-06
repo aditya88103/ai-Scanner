@@ -2,7 +2,6 @@
 
 NutriScan is a mobile-first barcode scanner that pulls product data from Open Food Facts and shows a simple nutrition score (0-10).
 
-Live demo: https://aditya88103.github.io/ai-Scanner/
 
 ## Features
 - Fast live scanning (BarcodeDetector when available, with Quagga fallback)
